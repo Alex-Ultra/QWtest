@@ -17,28 +17,30 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Stats represents system statistics
-type Stats struct {
-	CPU    float64 `json:"cpu"`
-	Memory float64 `json:"memory"`
-	Temp   float64 `json:"temp"`
+// SystemStats represents system statistics
+type SystemStats struct {
+	Hostname    string    `json:"hostname"`
+	CPUUsage    float64   `json:"cpu_usage"`
+	MemoryUsage float64   `json:"memory_usage"`
+	Temperature float64   `json:"temperature"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
-// AgentData represents data sent to the server
-type AgentData struct {
-	ID       string `json:"id"`
-	Hostname string `json:"hostname"`
-	OS       string `json:"os"`
-	Stats    Stats  `json:"stats"`
-	ProxyID  string `json:"proxy_id"`
+// ProgramStats represents program statistics
+type ProgramStats struct {
+	ProgramName string            `json:"program_name"`
+	Proxy       string            `json:"proxy"`
+	ProcessInfo map[string]string `json:"process_info"`
+	Timestamp   time.Time         `json:"timestamp"`
 }
 
 // Configuration for the agent
 type Config struct {
 	ServerURL string `json:"server_url"`
-	AgentID   string `json:"agent_id"`
+	Token     string `json:"token"`
+	Name      string `json:"name"`
 	Program   string `json:"program"`
-	ProxyID   string `json:"proxy_id"`
+	Proxy     string `json:"proxy"`
 }
 
 func main() {
@@ -50,6 +52,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Invalid server URL:", err)
 	}
+	
+	// Change the path to agent WebSocket endpoint
+	u.Path = "/agent/ws"
 	
 	if u.Scheme == "https" {
 		u.Scheme = "wss"
@@ -65,34 +70,90 @@ func main() {
 	
 	fmt.Println("Connected to server")
 	
-	// Start monitoring loop
-	ticker := time.NewTicker(10 * time.Second)
+	// Authenticate or register
+	var token string
+	if config.Token != "" {
+		// Try to authenticate with existing token
+		authMsg := map[string]interface{}{
+			"type":  "authenticate",
+			"token": config.Token,
+		}
+		err = c.WriteJSON(authMsg)
+		if err != nil {
+			log.Printf("Failed to send authentication message: %v", err)
+		}
+		
+		// Wait for response
+		var response map[string]interface{}
+		err = c.ReadJSON(&response)
+		if err != nil {
+			log.Printf("Failed to read authentication response: %v", err)
+		} else if response["type"] == "error" {
+			log.Printf("Authentication failed: %v", response["message"])
+			// Fall back to registration
+			token = registerAgent(c, config)
+		} else {
+			token = config.Token
+			fmt.Println("Authenticated with existing token")
+		}
+	} else {
+		// Register new agent
+		token = registerAgent(c, config)
+	}
+	
+	// Update config with new token
+	config.Token = token
+	saveConfig(config)
+	
+	// Start monitoring loop - send stats every 30 seconds
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	
 	for {
 		select {
 		case <-ticker.C:
-			stats := collectStats()
+			systemStats := collectSystemStats()
+			programStats := collectProgramStats(config)
 			
-			hostname, _ := os.Hostname()
-			
-			data := AgentData{
-				ID:       config.AgentID,
-				Hostname: hostname,
-				OS:       runtime.GOOS,
-				Stats:    stats,
-				ProxyID:  config.ProxyID,
+			statsMsg := map[string]interface{}{
+				"type":          "stats",
+				"system_stats":  systemStats,
+				"program_stats": programStats,
 			}
 			
-			err := c.WriteJSON(data)
+			err := c.WriteJSON(statsMsg)
 			if err != nil {
-				log.Printf("Failed to send data to server: %v", err)
+				log.Printf("Failed to send stats to server: %v", err)
 				// Try to reconnect
 				c, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 				if err != nil {
 					log.Printf("Failed to reconnect: %v", err)
+					// Wait a bit before trying again
+					time.Sleep(5 * time.Second)
+					continue
 				} else {
 					fmt.Println("Reconnected to server")
+					// Re-authenticate
+					authMsg := map[string]interface{}{
+						"type":  "authenticate",
+						"token": config.Token,
+					}
+					err = c.WriteJSON(authMsg)
+					if err != nil {
+						log.Printf("Failed to send authentication message: %v", err)
+						continue
+					}
+					
+					// Wait for response
+					var response map[string]interface{}
+					err = c.ReadJSON(&response)
+					if err != nil {
+						log.Printf("Failed to read authentication response: %v", err)
+						continue
+					} else if response["type"] == "error" {
+						log.Printf("Re-authentication failed: %v", response["message"])
+						continue
+					}
 				}
 			}
 			
@@ -101,7 +162,7 @@ func main() {
 			if !isRunning {
 				fmt.Printf("Program %s is not running\n", config.Program)
 				// Optionally restart the program with proxy settings
-				// startProgramWithProxy(config.Program, config.ProxyID)
+				// startProgramWithProxy(config.Program, config.Proxy)
 			} else {
 				fmt.Printf("Program %s is running\n", config.Program)
 			}
@@ -109,13 +170,55 @@ func main() {
 	}
 }
 
+func registerAgent(c *websocket.Conn, config Config) string {
+	// Register new agent
+	regMsg := map[string]interface{}{
+		"type": "register",
+		"name": config.Name,
+	}
+	err := c.WriteJSON(regMsg)
+	if err != nil {
+		log.Printf("Failed to send registration message: %v", err)
+		return ""
+	}
+	
+	// Wait for registration response
+	var response map[string]interface{}
+	err = c.ReadJSON(&response)
+	if err != nil {
+		log.Printf("Failed to read registration response: %v", err)
+		return ""
+	}
+	
+	if response["type"] != "registered" {
+		log.Printf("Registration failed: %v", response)
+		return ""
+	}
+	
+	token, ok := response["token"].(string)
+	if !ok {
+		log.Printf("Invalid registration response: token not found")
+		return ""
+	}
+	
+	agentID, ok := response["agent_id"].(string)
+	if !ok {
+		log.Printf("Invalid registration response: agent_id not found")
+		return ""
+	}
+	
+	fmt.Printf("Registered new agent: %s with token: %s\n", agentID, token)
+	
+	return token
+}
+
 func loadConfig() Config {
 	// Default configuration
 	config := Config{
-		ServerURL: "ws://localhost:8080/ws",
-		AgentID:   "agent_" + strconv.Itoa(int(time.Now().Unix())),
+		ServerURL: "ws://localhost:8080",
+		Name:      "agent_" + getHostname(),
 		Program:   "firefox", // Example program
-		ProxyID:   "proxy_1",
+		Proxy:     "proxy_1",
 	}
 	
 	// Try to load from config file
@@ -129,15 +232,32 @@ func loadConfig() Config {
 	return config
 }
 
-func collectStats() Stats {
-	stats := Stats{}
+func saveConfig(config Config) {
+	file, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal config: %v", err)
+		return
+	}
+	
+	err = os.WriteFile("config.json", file, 0644)
+	if err != nil {
+		log.Printf("Failed to save config: %v", err)
+	}
+}
+
+func collectSystemStats() SystemStats {
+	stats := SystemStats{}
+	
+	hostname, _ := os.Hostname()
+	stats.Hostname = hostname
+	stats.Timestamp = time.Now()
 	
 	// CPU usage
 	cpuPercent, err := cpu.Percent(time.Second, false)
 	if err != nil {
 		log.Printf("Error getting CPU usage: %v", err)
 	} else if len(cpuPercent) > 0 {
-		stats.CPU = cpuPercent[0]
+		stats.CPUUsage = cpuPercent[0]
 	}
 	
 	// Memory usage
@@ -145,19 +265,34 @@ func collectStats() Stats {
 	if err != nil {
 		log.Printf("Error getting memory usage: %v", err)
 	} else {
-		stats.Memory = vmStat.UsedPercent
+		stats.MemoryUsage = vmStat.UsedPercent
 	}
 	
 	// Temperature
 	temp, err := getTemperature()
 	if err != nil {
 		log.Printf("Error getting temperature: %v", err)
-		stats.Temp = 0.0
+		stats.Temperature = 0.0
 	} else {
-		stats.Temp = temp
+		stats.Temperature = temp
 	}
 	
 	return stats
+}
+
+func collectProgramStats(config Config) ProgramStats {
+	programStats := ProgramStats{
+		ProgramName: config.Program,
+		Proxy:       config.Proxy,
+		Timestamp:   time.Now(),
+		ProcessInfo: make(map[string]string),
+	}
+	
+	// Add any relevant process information
+	isRunning := isProgramRunning(config.Program)
+	programStats.ProcessInfo["running"] = fmt.Sprintf("%t", isRunning)
+	
+	return programStats
 }
 
 func getTemperature() (float64, error) {
@@ -171,7 +306,7 @@ func getTemperature() (float64, error) {
 		temp, err = getLinuxTemperature()
 	default:
 		// For other OS, return 0 as default
-		return 0.0, nil
+		return 40.0, nil
 	}
 	
 	return temp, err
@@ -231,6 +366,14 @@ func getLinuxTemperature() (float64, error) {
 	}
 	
 	return 40.0, nil // Default if no temperature found
+}
+
+func getHostname() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
 }
 
 func isProgramRunning(programName string) bool {
