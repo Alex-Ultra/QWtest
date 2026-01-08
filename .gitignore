@@ -1,15 +1,18 @@
 ```
 # Compiled and build artifacts
-*.exe
+proxy_control_system/agent/agent
+proxy_control_system/server/proxy_control_server
 *.o
 *.obj
+*.exe
+*.dll
+*.so
+*.a
 *.out
-proxy_control_system/bin/
 
-# Dependencies
-vendor/
-*.mod
-*.sum
+# Build scripts (if they generate artifacts)
+proxy_control_system/build_all.bat
+proxy_control_system/build_all.sh
 
 # Logs and temp files
 *.log
@@ -25,7 +28,28 @@ vendor/
 .vscode/
 .idea/
 
-# OS generated files
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Dependency directories
+venv/
+.venv/
+node_modules/
+.mypy_cache/
+.pytest_cache/
+.dist-info/
+
+# System files
 .DS_Store
 Thumbs.db
 ```

@@ -4,7 +4,7 @@ mkdir bin 2>nul
 
 echo Building server...
 cd server
-go build -o ../bin/server.exe main.go
+go build -o ../bin/server.exe main.go auth.go
 if %errorlevel% neq 0 (
     echo Failed to build server
     pause
