@@ -23,6 +23,58 @@
             margin-bottom: 30px;
         }
         
+        .login-form {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 50px auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .form-group {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            margin-top: 10px;
+            text-align: center;
+        }
+        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -87,54 +139,95 @@
             color: #666;
             font-style: italic;
         }
+        
+        .logout-btn {
+            background-color: #dc3545;
+            margin-top: 10px;
+        }
+        
+        .logout-btn:hover {
+            background-color: #c82333;
+        }
+        
+        .dashboard-content {
+            display: none;
+        }
+        
+        .login-content {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Proxy Control System Dashboard</h1>
+        <div class="login-content">
+            <div class="login-form">
+                <h2>Login to Proxy Control System</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit">Login</button>
+                </form>
+                <div id="errorMessage" class="error-message"></div>
+            </div>
+        </div>
         
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>System Overview</h3>
-                <p>Total Agents: <span id="total-agents">0</span></p>
-                <p>Online Agents: <span id="online-agents">0</span></p>
-                <p>Offline Agents: <span id="offline-agents">0</span></p>
+        <div class="dashboard-content" id="dashboard">
+            <h1>Proxy Control System Dashboard</h1>
+            
+            <div style="text-align: right; margin-bottom: 20px;">
+                <button class="logout-btn" id="logoutBtn">Logout</button>
             </div>
             
-            <div class="stat-card">
-                <h3>Server Status</h3>
-                <p>Connection: <span id="connection-status" class="status-online">Connected</span></p>
-                <p>Last Update: <span id="last-update">-</span></p>
-                <p>Refresh Rate: Every 10 seconds</p>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>System Overview</h3>
+                    <p>Total Agents: <span id="total-agents">0</span></p>
+                    <p>Online Agents: <span id="online-agents">0</span></p>
+                    <p>Offline Agents: <span id="offline-agents">0</span></p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Server Status</h3>
+                    <p>Connection: <span id="connection-status" class="status-online">Connected</span></p>
+                    <p>Last Update: <span id="last-update">-</span></p>
+                    <p>Refresh Rate: Every 10 seconds</p>
+                </div>
             </div>
-        </div>
-        
-        <div class="agent-list">
-            <h3>Connected Agents</h3>
-            <table id="agents-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Status</th>
-                        <th>IP</th>
-                        <th>Hostname</th>
-                        <th>CPU Usage</th>
-                        <th>Memory Usage</th>
-                        <th>Temperature</th>
-                        <th>Last Seen</th>
-                        <th>Program</th>
-                        <th>Proxy</th>
-                    </tr>
-                </thead>
-                <tbody id="agents-tbody">
-                    <!-- Agent data will be populated here -->
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="refresh-info">
-            <p>Data refreshes automatically every 10 seconds. Agents marked as offline if no stats received for 3 minutes.</p>
+            
+            <div class="agent-list">
+                <h3>Connected Agents</h3>
+                <table id="agents-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>IP</th>
+                            <th>Hostname</th>
+                            <th>CPU Usage</th>
+                            <th>Memory Usage</th>
+                            <th>Temperature</th>
+                            <th>Last Seen</th>
+                            <th>Program</th>
+                            <th>Proxy</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agents-tbody">
+                        <!-- Agent data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="refresh-info">
+                <p>Data refreshes automatically every 10 seconds. Agents marked as offline if no stats received for 3 minutes.</p>
+            </div>
         </div>
     </div>
 
@@ -143,23 +236,110 @@
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
         let socket;
+        let authToken = null;
         
         // DOM elements
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+        const dashboard = document.getElementById('dashboard');
         const agentsTbody = document.getElementById('agents-tbody');
         const totalAgentsEl = document.getElementById('total-agents');
         const onlineAgentsEl = document.getElementById('online-agents');
         const offlineAgentsEl = document.getElementById('offline-agents');
         const lastUpdateEl = document.getElementById('last-update');
+        const logoutBtn = document.getElementById('logoutBtn');
         
         // Agent data storage
         let agents = {};
         
+        // Login form submission
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token;
+                    
+                    // Hide login form and show dashboard
+                    document.querySelector('.login-content').style.display = 'none';
+                    document.querySelector('.dashboard-content').style.display = 'block';
+                    
+                    // Initialize WebSocket connection
+                    initWebSocket();
+                } else {
+                    const errorData = await response.json().catch(() => ({ message: 'Invalid credentials' }));
+                    errorMessage.textContent = errorData.message || 'Invalid credentials';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessage.textContent = 'An error occurred during login';
+            }
+        });
+        
+        // Logout button click
+        logoutBtn.addEventListener('click', async function() {
+            if (!authToken) return;
+            
+            try {
+                const response = await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                    // Close WebSocket connection
+                    if (socket) {
+                        socket.close();
+                    }
+                    
+                    // Clear auth token
+                    authToken = null;
+                    
+                    // Show login form and hide dashboard
+                    document.querySelector('.login-content').style.display = 'block';
+                    document.querySelector('.dashboard-content').style.display = 'none';
+                    
+                    // Clear form fields
+                    document.getElementById('username').value = '';
+                    document.getElementById('password').value = '';
+                    errorMessage.textContent = '';
+                }
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        });
+        
         // Initialize WebSocket connection
         function initWebSocket() {
-            socket = new WebSocket(wsUrl);
+            // Create a custom WebSocket connection with auth header
+            const ws = new WebSocket(wsUrl);
+            
+            // Set the Authorization header before connecting (this won't work directly)
+            // Instead, we'll send the token as part of the first message after connection
+            socket = ws;
             
             socket.onopen = function(event) {
                 console.log('Connected to WebSocket server');
+                // After opening connection, send the auth token
+                socket.send(JSON.stringify({
+                    type: "auth",
+                    token: authToken
+                }));
+                
                 document.getElementById('connection-status').className = 'status-online';
                 document.getElementById('connection-status').textContent = 'Connected';
             };
@@ -258,7 +438,7 @@
         
         // Periodically refresh agent data (every 10 seconds)
         setInterval(function() {
-            if (socket.readyState === WebSocket.OPEN) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
                 // Request fresh data (optional - depends on server implementation)
                 // For now, rely on WebSocket updates
             }
@@ -266,7 +446,8 @@
         
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
-            initWebSocket();
+            // Check if we already have a token stored (from localStorage or elsewhere)
+            // For now, just show the login form
             
             // Set initial time
             lastUpdateEl.textContent = new Date().toLocaleString();

@@ -1,17 +1,25 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
+
+type Session struct {
+	Username  string
+	CreatedAt time.Time
+}
 
 var (
 	proxies = make(map[string]string)
@@ -19,6 +27,8 @@ var (
 	broadcast = make(chan Agent, 10) // Channel to broadcast agent updates
 	clients = make(map[*websocket.Conn]bool) // Connected web clients
 	agentConnections = make(map[string]*websocket.Conn) // Agent connections
+	sessions = make(map[string]*Session) // Store active sessions
+	sessionMutex = sync.RWMutex{} // Mutex for session map
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
@@ -30,6 +40,8 @@ func main() {
 	router := mux.NewRouter()
 	
 	// API routes
+	router.HandleFunc("/api/login", loginHandler).Methods("POST")
+	router.HandleFunc("/api/logout", logoutHandler).Methods("POST")
 	router.HandleFunc("/api/proxies", getProxies).Methods("GET")
 	router.HandleFunc("/api/proxies", addProxy).Methods("POST")
 	router.HandleFunc("/api/proxies/{id}", deleteProxy).Methods("DELETE")
@@ -58,8 +70,123 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, router))
 }
 
+// Generate a random session token
+func generateSessionToken() (string, error) {
+	bytes := make([]byte, 32)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// Validate session token
+func validateSession(token string) bool {
+	sessionMutex.RLock()
+	defer sessionMutex.RUnlock()
+	
+	session, exists := sessions[token]
+	if !exists {
+		return false
+	}
+	
+	// Check if session is expired (expire after 24 hours)
+	if time.Since(session.CreatedAt) > 24*time.Hour {
+		delete(sessions, token)
+		return false
+	}
+	
+	return true
+}
+
+// Create a new session
+func createSession(username string) (string, error) {
+	token, err := generateSessionToken()
+	if err != nil {
+		return "", err
+	}
+	
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	
+	sessions[token] = &Session{
+		Username:  username,
+		CreatedAt: time.Now(),
+	}
+	
+	return token, nil
+}
+
+// Remove a session
+func removeSession(token string) {
+	sessionMutex.Lock()
+	defer sessionMutex.Unlock()
+	
+	delete(sessions, token)
+}
+
+// Login handler
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	var credentials struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	
+	// Check credentials (for now using a default user)
+	if credentials.Username == "admin" && credentials.Password == "admin123" {
+		token, err := createSession(credentials.Username)
+		if err != nil {
+			http.Error(w, "Failed to create session", http.StatusInternalServerError)
+			return
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"token": token,
+			"status": "success",
+		})
+	} else {
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+	}
+}
+
+// Logout handler
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" || len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
+		http.Error(w, "Authorization header missing or invalid", http.StatusUnauthorized)
+		return
+	}
+	
+	token := authHeader[7:]
+	removeSession(token)
+	
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "success",
+	})
+}
+
 // WebSocket endpoint for web interface
 func wsEndpoint(w http.ResponseWriter, r *http.Request) {
+	// Check for session token in Authorization header
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" || len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
+		http.Error(w, "Authorization header missing or invalid", http.StatusUnauthorized)
+		return
+	}
+	
+	token := authHeader[7:]
+	if !validateSession(token) {
+		http.Error(w, "Invalid or expired session", http.StatusUnauthorized)
+		return
+	}
+	
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade error: %v", err)
@@ -79,10 +206,29 @@ func wsEndpoint(w http.ResponseWriter, r *http.Request) {
 	// Keep connection alive
 	for {
 		// Read message to detect disconnection
-		_, _, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Printf("Client disconnected: %v", err)
 			break
+		}
+		
+		// Handle authentication message
+		var msg map[string]interface{}
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("Error unmarshalling message: %v", err)
+			continue
+		}
+		
+		if msg["type"] == "auth" {
+			clientToken, ok := msg["token"].(string)
+			if !ok || clientToken != token {
+				log.Printf("Invalid auth token from client")
+				conn.Close()
+				break
+			}
+			
+			// Token validated successfully
+			continue
 		}
 	}
 }

@@ -1,7 +1,5 @@
 ```
 # Compiled and build artifacts
-proxy_control_system/agent/agent
-proxy_control_system/server/proxy_control_server
 *.o
 *.obj
 *.exe
@@ -10,14 +8,21 @@ proxy_control_system/server/proxy_control_server
 *.a
 *.out
 
-# Build scripts (if they generate artifacts)
-proxy_control_system/build_all.bat
-proxy_control_system/build_all.sh
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
 
 # Environment
 .env
@@ -28,28 +33,36 @@ proxy_control_system/build_all.sh
 .vscode/
 .idea/
 
+# System files
+.DS_Store
+Thumbs.db
+
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-
-# Dependency directories
-venv/
-.venv/
-node_modules/
-.mypy_cache/
-.pytest_cache/
-.dist-info/
-
-# System files
-.DS_Store
-Thumbs.db
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
