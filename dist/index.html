@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .agent-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .agent-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #4caf50; }
+        .status-offline { background-color: #f44336; }
+        .status-mining { background-color: #2196f3; }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .metric {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+        .metric-label {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .btn-start { background-color: #4caf50; color: white; }
+        .btn-stop { background-color: #f44336; color: white; }
+        .btn-restart { background-color: #ff9800; color: white; }
+        .btn-update { background-color: #2196f3; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Monitor Control Panel</h1>
+            <p>Manage your mining agents remotely</p>
+        </header>
+        
+        <div id="agents-container">
+            <!-- Agent cards will be populated here -->
+        </div>
+    </div>
+
+    <script>
+        // Simple demo functionality
+        const agentsContainer = document.getElementById('agents-container');
+        
+        // Sample agent data
+        const sampleAgents = [
+            {
+                id: 'agent-1',
+                ip: '192.168.1.100',
+                platform: 'Windows',
+                last_seen: Date.now() - 30000, // 30 seconds ago
+                hashrate: 420.5,
+                cpu_usage: 75.3,
+                ram_usage: 62.1,
+                temp_cpu: 65,
+                status: 'mining',
+                version: '1.0.0'
+            },
+            {
+                id: 'agent-2',
+                ip: '192.168.1.101',
+                platform: 'Linux',
+                last_seen: Date.now() - 120000, // 2 minutes ago
+                hashrate: 380.2,
+                cpu_usage: 82.1,
+                ram_usage: 55.7,
+                temp_cpu: 70,
+                status: 'mining',
+                version: '1.0.0'
+            },
+            {
+                id: 'agent-3',
+                ip: '192.168.1.102',
+                platform: 'Windows',
+                last_seen: Date.now() - 300000, // 5 minutes ago
+                hashrate: 0,
+                cpu_usage: 5.2,
+                ram_usage: 15.3,
+                temp_cpu: 42,
+                status: 'stopped',
+                version: '1.0.0'
+            }
+        ];
+
+        function formatStatus(status) {
+            switch(status) {
+                case 'online': return '<span class="status-indicator status-online"></span>Online';
+                case 'mining': return '<span class="status-indicator status-mining"></span>Mining';
+                case 'stopped': return '<span class="status-indicator status-stopped"></span>Stopped';
+                case 'offline': return '<span class="status-indicator status-offline"></span>Offline';
+                default: return '<span class="status-indicator status-offline"></span>Unknown';
+            }
+        }
+
+        function renderAgents() {
+            agentsContainer.innerHTML = '';
+            
+            sampleAgents.forEach(agent => {
+                const card = document.createElement('div');
+                card.className = 'agent-card';
+                
+                const lastSeen = new Date(agent.last_seen);
+                const timeDiff = Math.floor((Date.now() - agent.last_seen) / 1000);
+                let timeStr = '';
+                if (timeDiff < 60) {
+                    timeStr = `${timeDiff} seconds ago`;
+                } else if (timeDiff < 3600) {
+                    timeStr = `${Math.floor(timeDiff / 60)} minutes ago`;
+                } else {
+                    timeStr = `${Math.floor(timeDiff / 3600)} hours ago`;
+                }
+                
+                card.innerHTML = `
+                    <div class="agent-header">
+                        <h3>${agent.id} (${agent.platform})</h3>
+                        <div>${formatStatus(agent.status)}</div>
+                    </div>
+                    <p><strong>IP:</strong> ${agent.ip} | <strong>Last seen:</strong> ${timeStr} | <strong>Version:</strong> ${agent.version}</p>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="metric-value">${agent.hashrate.toFixed(1)} H/s</div>
+                            <div class="metric-label">Hashrate</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${agent.cpu_usage.toFixed(1)}%</div>
+                            <div class="metric-label">CPU Usage</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${agent.ram_usage.toFixed(1)}%</div>
+                            <div class="metric-label">RAM Usage</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">${agent.temp_cpu}°C</div>
+                            <div class="metric-label">CPU Temp</div>
+                        </div>
+                    </div>
+                    
+                    <div class="controls">
+                        <button class="btn-start">Start Mining</button>
+                        <button class="btn-stop">Stop Mining</button>
+                        <button class="btn-restart">Restart</button>
+                        <button class="btn-update">Update Config</button>
+                    </div>
+                `;
+                
+                agentsContainer.appendChild(card);
+            });
+        }
+
+        // Initial render
+        renderAgents();
+        
+        // Simulate live updates
+        setInterval(() => {
+            // In a real implementation, this would fetch data from the API
+            console.log('Polling for updates...');
+        }, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+server_url: "https://server:8080"
+token: "abc123"
+
+paths:
+  monitor_bin: "./bin/monitor"
+  monitor_config: "./configs/monitor-config.json"
+  monitor_log_file: "./logs/monitor.log"
+
+metrics_interval: 30
