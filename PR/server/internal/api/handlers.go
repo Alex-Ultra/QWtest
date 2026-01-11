@@ -315,15 +315,33 @@ func (h *Handlers) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 func serveStaticFiles(cfg *config.Config, router *mux.Router) {
 	staticDir := cfg.Paths.WebDistDir
+	
+	// Check if the static directory exists
+	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
+		log.Printf("Warning: Static files directory does not exist: %s", staticDir)
+		return
+	}
+	
 	fs := http.FileServer(http.Dir(staticDir))
 	
-	// Serve static files under /static prefix
+	// Serve static files from multiple possible prefixes
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+	router.PathPrefix("/dist/").Handler(http.StripPrefix("/dist/", fs))
+	router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", fs))
 	
-	// Catch-all handler for SPA routing
-	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Don't serve index.html for API routes
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+	// Specific handler for index.html (only for root path)
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, staticDir+"/index.html")
+	})
+	
+	// Catch-all handler for SPA routing (after API routes are defined)
+	router.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Serve index.html for SPA fallback, except for API routes
+		if strings.HasPrefix(r.URL.Path, "/api/") || 
+		   strings.HasPrefix(r.URL.Path, "/ws") ||
+		   strings.HasPrefix(r.URL.Path, "/static/") ||
+		   strings.HasPrefix(r.URL.Path, "/dist/") ||
+		   strings.HasPrefix(r.URL.Path, "/assets/") {
 			http.NotFound(w, r)
 			return
 		}
