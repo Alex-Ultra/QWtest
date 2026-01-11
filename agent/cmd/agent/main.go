@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -16,10 +14,33 @@ import (
 )
 
 func main() {
-	// Load configuration
-	cfg, err := monitor_agent.LoadConfig("configs/agent-config.yaml")
+	// Determine config path relative to executable location
+	configPath := "configs/agent-config.yaml"
+	
+	// Also check for alternative paths for cross-platform compatibility
+	cfg, err := monitor_agent.LoadConfig(configPath)
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		// Try alternative paths for cross-platform compatibility
+		altConfigPath := "../configs/agent-config.yaml"
+		cfg, err = monitor_agent.LoadConfig(altConfigPath)
+		if err != nil {
+			// Check if config file exists in current directory
+			if _, statErr := os.Stat("agent-config.yaml"); statErr == nil {
+				cfg, err = monitor_agent.LoadConfig("agent-config.yaml")
+				if err != nil {
+					log.Fatalf("Failed to load agent config from any location: original path '%s': %v, alt path '%s': %v, local 'agent-config.yaml': %v", 
+						configPath, err, altConfigPath, err, err)
+				}
+				log.Printf("Loaded agent config from local directory")
+			} else {
+				log.Fatalf("Failed to load agent config from any location: original path '%s': %v, alt path '%s': %v, local 'agent-config.yaml' not found: %v", 
+					configPath, err, altConfigPath, err, statErr)
+			}
+		} else {
+			log.Printf("Loaded agent config from alternative path: %s", altConfigPath)
+		}
+	} else {
+		log.Printf("Loaded agent config from: %s", configPath)
 	}
 
 	// Create updater

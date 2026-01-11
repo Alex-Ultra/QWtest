@@ -121,7 +121,7 @@ func (c *Client) readPump() {
 		}
 		
 		// Handle command if present
-		if action, ok := msgMap["action"]; ok {
+		if _, ok := msgMap["action"]; ok {
 			if c.OnCommand != nil {
 				c.OnCommand(msgMap)
 			}
