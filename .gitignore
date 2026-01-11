@@ -1,8 +1,18 @@
 ```
-# Binaries
+# Go build artifacts
 *.o
-*.obj
-*.out
+*.a
+*.so
+*.exe
+*.dll
+*.dylib
+*.test
+*.prof
+
+# Go cache and tools
+.cache/
+go.exe
+*.go.exe
 
 # Dependencies
 vendor/
@@ -18,12 +28,45 @@ vendor/
 # Editors
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Build artifacts
-monitor-system/agent/bin/
-monitor-system/server/bin/
-*.exe
-*.dll
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Build directories
+build/
+dist/
+target/
+
+# Python (if co-existing)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
 *.so
-*.a
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+coverage.xml
+*.cover
+*.log
+*.tmp
 ```

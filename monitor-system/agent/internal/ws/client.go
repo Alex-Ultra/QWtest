@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"net/http"
 	"log"
 	"net/url"
 	"sync"
@@ -71,8 +72,8 @@ func (c *Client) connect() error {
 	q.Add("token", c.Config.Token)
 	u.RawQuery = q.Encode()
 
-	headers := make(map[string]string)
-	headers["Authorization"] = "Bearer " + c.Config.Token
+	headers := make(http.Header)
+	headers.Set("Authorization", "Bearer "+c.Config.Token)
 
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), headers)
 	if err != nil {

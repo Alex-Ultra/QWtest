@@ -13,7 +13,6 @@ import (
 	"monitor-server/internal/auth"
 	"monitor-server/internal/config"
 	"monitor-server/internal/models"
-	"monitor-server/internal/ws"
 )
 
 var (

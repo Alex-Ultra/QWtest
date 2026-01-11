@@ -1,0 +1,20 @@
+{
+  "pools": [
+    {
+      "url": "pool.supportxmr.com:3333",
+      "user": "44AFFqy7375JZ4QH4CNjvwV5YgFg9wqD4GcxxuEf8hT14VrY4YbqN2uyNMy6fWZkVM9EuJajCCHTSfmh2U4vcNLX34BdxRT",
+      "pass": "x",
+      "keepalive": true,
+      "tls": false
+    }
+  ],
+  "cpu": {
+    "enabled": true,
+    "threads": 0,
+    "priority": 0,
+    "memory-pool": false
+  },
+  "opencl": false,
+  "cuda": false,
+  "donate-level": 1
+}
