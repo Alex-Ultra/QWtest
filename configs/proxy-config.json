@@ -1,0 +1,24 @@
+{
+  "pools": [
+    {
+      "url": "pool.supportxmr.com:3333",
+      "user": "YOUR_XMR_ADDRESS",
+      "pass": "x",
+      "keepalive": true,
+      "tls": false
+    }
+  ],
+  "upstream": {
+    "url": "localhost:3333",
+    "user": "YOUR_XMR_ADDRESS",
+    "pass": "x"
+  },
+  "bind": [
+    "127.0.0.1:3333"
+  ],
+  "access-log": {
+    "file": "access.log",
+    "max-files": 3
+  },
+  "donate-level": 1
+}
