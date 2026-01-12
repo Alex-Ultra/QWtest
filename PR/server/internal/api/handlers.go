@@ -317,8 +317,10 @@ func serveStaticFiles(cfg *config.Config, router *mux.Router) {
 	staticDir := cfg.Paths.WebDistDir
 	fs := http.FileServer(http.Dir(staticDir))
 	
-	// Serve static files under /static prefix
-	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+	// Serve static files (CSS, JS, images) under /static prefix
+	router.PathPrefix("/styles.css").Handler(http.StripPrefix("", fs))
+	router.PathPrefix("/app.js").Handler(http.StripPrefix("", fs))
+	router.PathPrefix("/favicon.ico").Handler(http.StripPrefix("", fs))
 	
 	// Catch-all handler for SPA routing
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

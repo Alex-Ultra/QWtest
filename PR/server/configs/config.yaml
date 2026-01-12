@@ -6,6 +6,7 @@ tokens:
   "abc123": "agent-1"
   "def456": "agent-2"
   "xyz789": "agent-3"
+  "web-interface-token": "web-interface"  # Special token for web interface
 
 paths:
   monitor_bin_dir: "./assets/bins/monitor/"
