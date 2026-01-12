@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"runtime"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -167,8 +168,8 @@ func (c *Client) SendMetrics(hashrate float64, cpuUsage float64, ramUsage float6
 		"ram_usage": ramUsage,
 		"temp_cpu":  tempCPU,
 		"status":    status,
-		"platform":  "unknown", // This would be determined dynamically
-		"version":   "1.0.0", // This would come from config or build
+		"platform":  getPlatformInfo(),
+		"version":   getVersionInfo(),
 	}
 	
 	data, err := json.Marshal(metrics)
@@ -190,4 +191,18 @@ func (c *Client) Reconnect() error {
 	c.Disconnect()
 	time.Sleep(5 * time.Second) // Wait before reconnecting
 	return c.Connect()
+}
+
+// Helper functions to get dynamic information
+func getPlatformInfo() string {
+	// Get the operating system and architecture
+	os := runtime.GOOS
+	arch := runtime.GOARCH
+	return fmt.Sprintf("%s/%s", os, arch)
+}
+
+func getVersionInfo() string {
+	// In a real implementation, this would return the actual build version
+	// For now, we'll return a placeholder that could be replaced during build
+	return "dynamic_version" // This would normally be set via build flags
 }
