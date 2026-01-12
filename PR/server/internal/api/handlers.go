@@ -317,21 +317,31 @@ func serveStaticFiles(cfg *config.Config, router *mux.Router) {
 	staticDir := cfg.Paths.WebDistDir
 	fs := http.FileServer(http.Dir(staticDir))
 	
-	// Serve static files (CSS, JS, images) under /static prefix
+	// Handle specific static file requests first
 	router.PathPrefix("/styles.css").Handler(http.StripPrefix("", fs))
 	router.PathPrefix("/app.js").Handler(http.StripPrefix("", fs))
 	router.PathPrefix("/favicon.ico").Handler(http.StripPrefix("", fs))
+	router.PathPrefix("/assets/").Handler(http.StripPrefix("", fs))
 	
-	// Catch-all handler for SPA routing
+	// Catch-all handler for SPA routing (must be last)
 	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Don't serve index.html for API routes
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		// Don't serve index.html for API routes or other specific routes
+		if strings.HasPrefix(r.URL.Path, "/api/") || 
+		   strings.HasPrefix(r.URL.Path, "/ws") {
 			http.NotFound(w, r)
 			return
 		}
 		
-		// Serve index.html for all other routes (SPA)
-		http.ServeFile(w, r, staticDir+"/index.html")
+		// Try to serve the requested file first
+		filePath := filepath.Join(staticDir, r.URL.Path)
+		if _, err := os.Stat(filePath); err == nil {
+			// File exists, serve it
+			http.ServeFile(w, r, filePath)
+			return
+		}
+		
+		// File doesn't exist, serve index.html for SPA routing
+		http.ServeFile(w, r, filepath.Join(staticDir, "index.html"))
 	})
 }
 
