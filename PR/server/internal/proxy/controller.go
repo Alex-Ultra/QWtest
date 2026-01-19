@@ -1,99 +1,154 @@
+// Пакет proxy предоставляет функциональность для управления процессом прокси-сервера
 package proxy
 
 import (
-	"fmt"
-	"os/exec"
-	"sync"
+	"fmt"     // Пакет для форматированного вывода
+	"os/exec" // Пакет для выполнения внешних команд
+	"sync"    // Пакет для синхронизации горутин
 )
 
+// Структура Controller управляет процессом прокси-сервера
+// binaryPath - путь к исполняемому файлу прокси
+// configPath - путь к конфигурационному файлу прокси
+// isRunning - флаг, указывающий, запущен ли процесс прокси
+// mutex - мьютекс для защиты одновременного доступа к состоянию процесса
+// cmd - команда, представляющая запущенный процесс прокси
 type Controller struct {
-	binaryPath    string
-	configPath    string
-	isRunning     bool
-	mutex         sync.RWMutex
-	cmd           *exec.Cmd
+	binaryPath    string      // Путь к исполняемому файлу прокси
+	configPath    string      // Путь к конфигурационному файлу прокси
+	isRunning     bool        // Флаг, указывающий, запущен ли процесс прокси
+	mutex         sync.RWMutex // Мьютекс для защиты одновременного доступа к состоянию процесса
+	cmd           *exec.Cmd   // Команда, представляющая запущенный процесс прокси
 }
 
+// Функция NewController создает новый экземпляр контроллера прокси
+// Принимает: путь к бинарному файлу и путь к конфигурационному файлу
+// Возвращает: указатель на новый экземпляр Controller
 func NewController(binaryPath, configPath string) *Controller {
+	// Создаем и возвращаем новый экземпляр контроллера
+	// Устанавливаем начальные значения полей структуры
 	return &Controller{
-		binaryPath: binaryPath,
-		configPath: configPath,
-		isRunning:  false,
+		binaryPath: binaryPath, // Путь к исполняемому файлу прокси
+		configPath: configPath, // Путь к конфигурационному файлу прокси
+		isRunning:  false,      // Изначально процесс не запущен
 	}
 }
 
+// Метод Start запускает процесс прокси-сервера
+// Принимает: ничего
+// Возвращает: ошибку при неудаче
 func (pc *Controller) Start() error {
+	// Блокируем контроллер для записи
 	pc.mutex.Lock()
+	// Отложенное снятие блокировки
 	defer pc.mutex.Unlock()
 	
+	// Проверяем, запущен ли процесс
 	if pc.isRunning {
+		// Если процесс уже запущен, возвращаем ошибку
 		return fmt.Errorf("proxy is already running")
 	}
 	
-	// Start the proxy process
+	// Запускаем процесс прокси-сервера
 	cmd := exec.Command(pc.binaryPath, "-c", pc.configPath)
 	err := cmd.Start()
 	if err != nil {
+		// Если не удалось запустить процесс, возвращаем ошибку
 		return err
 	}
 	
+	// Сохраняем команду и устанавливаем флаг запуска
 	pc.cmd = cmd
 	pc.isRunning = true
 	
-	// Wait for the process in a goroutine to handle completion
+	// Запускаем горутину для ожидания завершения процесса
+	// Это позволяет отслеживать завершение процесса и освобождать ресурсы
 	go func() {
+		// Ждем завершения процесса
 		_ = cmd.Wait()
+		
+		// Обновляем состояние контроллера после завершения процесса
 		pc.mutex.Lock()
 		pc.isRunning = false
 		pc.cmd = nil
 		pc.mutex.Unlock()
 	}()
 	
+	// Возвращаем nil как признак успешного запуска
 	return nil
 }
 
+// Метод Stop останавливает процесс прокси-сервера
+// Принимает: ничего
+// Возвращает: ошибку при неудаче
 func (pc *Controller) Stop() error {
+	// Блокируем контроллер для записи
 	pc.mutex.Lock()
+	// Отложенное снятие блокировки
 	defer pc.mutex.Unlock()
 	
+	// Проверяем, запущен ли процесс
 	if !pc.isRunning || pc.cmd == nil {
+		// Если процесс не запущен, возвращаем ошибку
 		return fmt.Errorf("proxy is not running")
 	}
 	
+	// Убиваем процесс прокси-сервера
 	err := pc.cmd.Process.Kill()
 	if err != nil {
+		// Если не удалось убить процесс, возвращаем ошибку
 		return err
 	}
 	
+	// Обновляем состояние контроллера
 	pc.isRunning = false
 	pc.cmd = nil
 	
+	// Возвращаем nil как признак успешной остановки
 	return nil
 }
 
+// Метод Restart перезапускает процесс прокси-сервера
+// Принимает: ничего
+// Возвращает: ошибку при неудаче
 func (pc *Controller) Restart() error {
+	// Останавливаем текущий процесс
 	err := pc.Stop()
 	if err != nil {
+		// Если не удалось остановить процесс, возвращаем ошибку
 		return err
 	}
 	
+	// Запускаем процесс заново
 	return pc.Start()
 }
 
+// Метод IsRunning проверяет, запущен ли процесс прокси-сервера
+// Принимает: ничего
+// Возвращает: true, если процесс запущен, иначе false
 func (pc *Controller) IsRunning() bool {
+	// Блокируем контроллер для чтения
 	pc.mutex.RLock()
+	// Отложенное снятие блокировки
 	defer pc.mutex.RUnlock()
 	
+	// Возвращаем состояние процесса
 	return pc.isRunning
 }
 
+// Метод Status возвращает статус процесса прокси-сервера
+// Принимает: ничего
+// Возвращает: карту с информацией о статусе процесса
 func (pc *Controller) Status() map[string]interface{} {
+	// Блокируем контроллер для чтения
 	pc.mutex.RLock()
+	// Отложенное снятие блокировки
 	defer pc.mutex.RUnlock()
 	
+	// Возвращаем карту с информацией о статусе процесса
 	return map[string]interface{}{
-		"is_running": pc.isRunning,
-		"binary_path": pc.binaryPath,
-		"config_path": pc.configPath,
+		"is_running":  pc.isRunning,   // Флаг запуска процесса
+		"binary_path": pc.binaryPath,  // Путь к исполняемому файлу
+		"config_path": pc.configPath,  // Путь к конфигурационному файлу
 	}
 }

@@ -1,47 +1,30 @@
 ```
-# Go-specific ignores
+# Compiled and build artifacts
 *.o
-*.a
-*.so
-*.exe
-*.dll
+*.obj
 *.out
-*.test
-*.prof
-coverage.out
 
 # Dependencies
 vendor/
 
-# Build artifacts
-bin/
-pkg/
-*.mod
-*.sum
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# Logs and temporary files
+# Logs and temp files
 *.log
 *.tmp
 
-# Environment variables
+# Environment
 .env
 .env.local
 *.env.*
 
-# Coverage and testing
-coverage/
-htmlcov/
-.coverage
-*.coverprofile
+# Editors
+.vscode/
+.idea/
 
-# System files
-.DS_Store
-Thumbs.db
+# Go-specific
+*.exe
+*.dll
+*.so
+*.a
+*.dylib
+*.plist
 ```

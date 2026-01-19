@@ -1,115 +1,175 @@
+// Пакет monitor предоставляет функциональность для управления процессом мониторинга
 package monitor
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"sync"
-	"time"
+	"fmt"      // Пакет для форматированного вывода
+	"os"       // Пакет для работы с операционной системой
+	"os/exec"  // Пакет для выполнения внешних команд
+	"sync"     // Пакет для синхронизации горутин
+	"time"     // Пакет для работы со временем
 )
 
+// Структура Controller управляет процессом мониторинга
+// binaryPath - путь к исполняемому файлу монитора
+// configPath - путь к конфигурационному файлу монитора
+// logFilePath - путь к лог-файлу монитора
+// isRunning - флаг, указывающий, запущен ли процесс мониторинга
+// mutex - мьютекс для защиты одновременного доступа к состоянию процесса
+// cmd - команда, представляющая запущенный процесс мониторинга
 type Controller struct {
-	binaryPath    string
-	configPath    string
-	logFilePath   string
-	isRunning     bool
-	mutex         sync.RWMutex
-	cmd           *exec.Cmd
+	binaryPath    string      // Путь к исполняемому файлу монитора
+	configPath    string      // Путь к конфигурационному файлу монитора
+	logFilePath   string      // Путь к лог-файлу монитора
+	isRunning     bool        // Флаг, указывающий, запущен ли процесс мониторинга
+	mutex         sync.RWMutex // Мьютекс для защиты одновременного доступа к состоянию процесса
+	cmd           *exec.Cmd   // Команда, представляющая запущенный процесс мониторинга
 }
 
+// Функция NewController создает новый экземпляр контроллера мониторинга
+// Принимает: путь к бинарному файлу, путь к конфигурационному файлу и путь к лог-файлу
+// Возвращает: указатель на новый экземпляр Controller
 func NewController(binaryPath, configPath, logFilePath string) *Controller {
+	// Создаем и возвращаем новый экземпляр контроллера
+	// Устанавливаем начальные значения полей структуры
 	return &Controller{
-		binaryPath:  binaryPath,
-		configPath:  configPath,
-		logFilePath: logFilePath,
-		isRunning:   false,
+		binaryPath:  binaryPath,   // Путь к исполняемому файлу монитора
+		configPath:  configPath,   // Путь к конфигурационному файлу монитора
+		logFilePath: logFilePath,  // Путь к лог-файлу монитора
+		isRunning:   false,        // Изначально процесс не запущен
 	}
 }
 
+// Метод Start запускает процесс мониторинга
+// Принимает: ничего
+// Возвращает: ошибку при неудаче
 func (mc *Controller) Start() error {
+	// Блокируем контроллер для записи
 	mc.mutex.Lock()
+	// Отложенное снятие блокировки
 	defer mc.mutex.Unlock()
 	
+	// Проверяем, запущен ли процесс
 	if mc.isRunning {
+		// Если процесс уже запущен, возвращаем ошибку
 		return fmt.Errorf("monitor is already running")
 	}
 	
-	// Open log file
+	// Открываем лог-файл
 	logFile, err := os.OpenFile(mc.logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
+		// Если не удалось открыть лог-файл, возвращаем ошибку
 		return fmt.Errorf("failed to open log file: %v", err)
 	}
 	
-	// Start the monitor process
+	// Запускаем процесс мониторинга
 	cmd := exec.Command(mc.binaryPath, "-c", mc.configPath)
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
+	cmd.Stdout = logFile  // Перенаправляем стандартный вывод в лог-файл
+	cmd.Stderr = logFile  // Перенаправляем стандартный поток ошибок в лог-файл
 	
+	// Запускаем процесс без ожидания его завершения
 	err = cmd.Start()
 	if err != nil {
+		// Если не удалось запустить процесс, закрываем лог-файл и возвращаем ошибку
 		logFile.Close()
 		return err
 	}
 	
+	// Сохраняем команду и устанавливаем флаг запуска
 	mc.cmd = cmd
 	mc.isRunning = true
 	
-	// Wait for the process in a goroutine to handle completion
+	// Запускаем горутину для ожидания завершения процесса
+	// Это позволяет отслеживать завершение процесса и освобождать ресурсы
 	go func() {
+		// Ждем завершения процесса
 		_ = cmd.Wait()
+		// Закрываем лог-файл после завершения процесса
 		logFile.Close()
 		
+		// Обновляем состояние контроллера после завершения процесса
 		mc.mutex.Lock()
 		mc.isRunning = false
 		mc.cmd = nil
 		mc.mutex.Unlock()
 	}()
 	
+	// Возвращаем nil как признак успешного запуска
 	return nil
 }
 
+// Метод Stop останавливает процесс мониторинга
+// Принимает: ничего
+// Возвращает: ошибку при неудаче
 func (mc *Controller) Stop() error {
+	// Блокируем контроллер для записи
 	mc.mutex.Lock()
+	// Отложенное снятие блокировки
 	defer mc.mutex.Unlock()
 	
+	// Проверяем, запущен ли процесс
 	if !mc.isRunning || mc.cmd == nil {
+		// Если процесс не запущен, возвращаем ошибку
 		return fmt.Errorf("monitor is not running")
 	}
 	
+	// Убиваем процесс мониторинга
 	err := mc.cmd.Process.Kill()
 	if err != nil {
+		// Если не удалось убить процесс, возвращаем ошибку
 		return err
 	}
 	
+	// Обновляем состояние контроллера
 	mc.isRunning = false
 	mc.cmd = nil
 	
+	// Возвращаем nil как признак успешной остановки
 	return nil
 }
 
+// Метод Restart перезапускает процесс мониторинга
+// Принимает: ничего
+// Возвращает: ошибку при неудаче
 func (mc *Controller) Restart() error {
+	// Останавливаем текущий процесс
 	err := mc.Stop()
 	if err != nil {
+		// Если не удалось остановить процесс, возвращаем ошибку
 		return err
 	}
 	
+	// Ждем 1 секунду перед перезапуском
 	time.Sleep(1 * time.Second)
 	
+	// Запускаем процесс заново
 	return mc.Start()
 }
 
+// Метод IsRunning проверяет, запущен ли процесс мониторинга
+// Принимает: ничего
+// Возвращает: true, если процесс запущен, иначе false
 func (mc *Controller) IsRunning() bool {
+	// Блокируем контроллер для чтения
 	mc.mutex.RLock()
+	// Отложенное снятие блокировки
 	defer mc.mutex.RUnlock()
 	
+	// Возвращаем состояние процесса
 	return mc.isRunning
 }
 
+// Метод UpdateConfig обновляет путь к конфигурационному файлу
+// Принимает: новый путь к конфигурационному файлу
+// Возвращает: ошибку при неудаче
 func (mc *Controller) UpdateConfig(configPath string) error {
+	// Блокируем контроллер для записи
 	mc.mutex.Lock()
+	// Отложенное снятие блокировки
 	defer mc.mutex.Unlock()
 	
-	// Copy new config to the current config path
+	// Обновляем путь к конфигурационному файлу
+	// Для применения новых настроек потребуется перезапуск процесса
 	mc.configPath = configPath
+	// Возвращаем nil как признак успешного обновления
 	return nil
 }
