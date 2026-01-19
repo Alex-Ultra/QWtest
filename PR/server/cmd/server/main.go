@@ -1,60 +1,75 @@
+// Пакет main содержит основной исполняемый код для сервера мониторинга
 package main
 
 import (
-	"log"
-	"net/http"
-	"os"
-	"path/filepath"
+	"log"         // Пакет для логирования событий
+	"net/http"    // Пакет для HTTP-сервера
+	"os"          // Пакет для работы с операционной системой
+	"path/filepath" // Пакет для работы с путями к файлам
 
-	"github.com/gorilla/mux"
-	"pr-server/internal/api"
-	"pr-server/internal/config"
-	"pr-server/internal/ws"
+	"github.com/gorilla/mux" // Маршрутизатор HTTP-запросов
+	"pr-server/internal/api"  // Внутренний модуль API-обработчиков
+	"pr-server/internal/config" // Внутренний модуль для загрузки конфигурации сервера
+	"pr-server/internal/ws"     // Внутренний модуль для работы с WebSocket-хабом
 )
 
+// Функция main - точка входа в приложение сервера мониторинга
+// Выполняет следующие действия:
+// 1. Загружает конфигурационный файл
+// 2. Инициализирует WebSocket-хаб
+// 3. Создает маршрутизатор и инициализирует API-обработчики
+// 4. Запускает HTTP-сервер
 func main() {
-	// Determine config path relative to executable location
+	// Определяем путь к конфигурационному файлу относительно местоположения исполняемого файла
 	configPath := filepath.Join("configs", "config.yaml")
 	
-	// Also check for absolute path or working directory
+	// Также проверяем абсолютный путь или рабочую директорию
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		// Try alternative paths for cross-platform compatibility
-		// Check if we're in a subdirectory, try relative to root
+		// Пробуем альтернативные пути для совместимости между платформами
+		// Проверяем, находимся ли мы в подкаталоге, пробуем относительный путь к корню
 		altConfigPath := filepath.Join("..", "configs", "config.yaml")
 		cfg, err = config.LoadConfig(altConfigPath)
 		if err != nil {
-			// Check if config file exists in current directory
+			// Проверяем, существует ли конфигурационный файл в текущей директории
 			if _, statErr := os.Stat("config.yaml"); statErr == nil {
 				cfg, err = config.LoadConfig("config.yaml")
 				if err != nil {
-					log.Fatalf("Failed to load config from any location: original path '%s': %v, alt path '%s': %v, local 'config.yaml': %v", 
+					log.Fatalf("Не удалось загрузить конфигурацию из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'config.yaml': %v", 
 						configPath, err, altConfigPath, err, err)
 				}
-				log.Printf("Loaded config from local directory")
+				log.Printf("Конфигурация загружена из локальной директории")
 			} else {
-				log.Fatalf("Failed to load config from any location: original path '%s': %v, alt path '%s': %v, local 'config.yaml' not found: %v", 
+				log.Fatalf("Не удалось загрузить конфигурацию из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'config.yaml' не найден: %v", 
 					configPath, err, altConfigPath, err, statErr)
 			}
 		} else {
-			log.Printf("Loaded config from alternative path: %s", altConfigPath)
+			log.Printf("Конфигурация загружена из альтернативного пути: %s", altConfigPath)
 		}
 	} else {
-		log.Printf("Loaded config from: %s", configPath)
+		log.Printf("Конфигурация загружена из: %s", configPath)
 	}
 
-	// Initialize WebSocket hub
+	// Инициализируем WebSocket-хаб
+	// Создает новый экземпляр хаба для управления WebSocket-соединениями
 	hub := ws.NewHub()
-	go hub.Run()
+	go hub.Run() // Запускаем хаб в отдельной горутине
 
-	// Create router
+	// Создаем маршрутизатор
+	// Используется для маршрутизации HTTP-запросов к соответствующим обработчикам
 	router := mux.NewRouter()
 
-	// Initialize API handlers
+	// Инициализируем обработчики API
+	// Устанавливает все необходимые маршруты и их обработчики
+	// router - маршрутизатор HTTP-запросов
+	// hub - WebSocket-хаб для обработки соединений
+	// cfg - конфигурация сервера
 	api.InitHandlers(router, hub, cfg)
 
-	// Start server
+	// Запускаем сервер
+	// Формируем адрес сервера из хоста и порта из конфигурации
 	addr := cfg.Server.Host + ":" + cfg.Server.Port
-	log.Printf("Starting server on %s", addr)
+	log.Printf("Запуск сервера на %s", addr)
+	// Запускаем HTTP-сервер на указанном адресе с маршрутизатором
 	log.Fatal(http.ListenAndServe(addr, router))
 }

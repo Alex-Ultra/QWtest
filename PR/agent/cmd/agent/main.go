@@ -1,216 +1,277 @@
+// Пакет main содержит основной исполняемый код для агента мониторинга
 package main
 
 import (
-	"log"
-	"os"
-	"os/signal"
-	"runtime"
-	"strings"
-	"syscall"
-	"time"
+	"log"      // Пакет для логирования событий
+	"os"       // Пакет для работы с операционной системой
+	"os/signal" // Пакет для обработки системных сигналов
+	"runtime"  // Пакет для получения информации о среде выполнения Go
+	"strings"  // Пакет для работы со строками
+	"syscall"  // Пакет для системных вызовов Unix
+	"time"     // Пакет для работы со временем
 
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/host"
-	"github.com/shirou/gopsutil/v3/mem"
-	monitor_agent "pr-agent/internal/config"
-	"pr-agent/internal/monitor"
-	"pr-agent/internal/updater"
-	"pr-agent/internal/ws"
+	"github.com/shirou/gopsutil/v3/cpu"   // Библиотека для получения информации о процессоре
+	"github.com/shirou/gopsutil/v3/host"  // Библиотека для получения информации о системе
+	"github.com/shirou/gopsutil/v3/mem"   // Библиотека для получения информации о памяти
+	monitor_agent "pr-agent/internal/config" // Внутренний модуль для загрузки конфигурации агента
+	"pr-agent/internal/monitor"             // Внутренний модуль управления монитором
+	"pr-agent/internal/updater"             // Внутренний модуль обновления бинарных файлов
+	"pr-agent/internal/ws"                  // Внутренний модуль для работы с WebSocket-соединением
 )
 
+// Функция main - точка входа в приложение агента мониторинга
+// Выполняет следующие действия:
+// 1. Загружает конфигурационный файл
+// 2. Инициализирует компоненты агента (обновление, мониторинг, WebSocket-соединение)
+// 3. Устанавливает обработчики команд от сервера
+// 4. Запускает цикл отправки метрик
+// 5. Обрабатывает сигналы завершения для корректного завершения работы
 func main() {
-	// Determine config path relative to executable location
+	// Определяем путь к конфигурационному файлу относительно местоположения исполняемого файла
 	configPath := "configs/agent-config.yaml"
 	
-	// Also check for alternative paths for cross-platform compatibility
+	// Также проверяем альтернативные пути для совместимости между платформами
 	cfg, err := monitor_agent.LoadConfig(configPath)
 	if err != nil {
-		// Try alternative paths for cross-platform compatibility
+		// Пробуем альтернативные пути для совместимости между платформами
 		altConfigPath := "../configs/agent-config.yaml"
 		cfg, err = monitor_agent.LoadConfig(altConfigPath)
 		if err != nil {
-			// Check if config file exists in current directory
+			// Проверяем, существует ли конфигурационный файл в текущей директории
 			if _, statErr := os.Stat("agent-config.yaml"); statErr == nil {
 				cfg, err = monitor_agent.LoadConfig("agent-config.yaml")
 				if err != nil {
-					log.Fatalf("Failed to load agent config from any location: original path '%s': %v, alt path '%s': %v, local 'agent-config.yaml': %v", 
+					log.Fatalf("Не удалось загрузить конфигурацию агента из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'agent-config.yaml': %v", 
 						configPath, err, altConfigPath, err, err)
 				}
-				log.Printf("Loaded agent config from local directory")
+				log.Printf("Конфигурация агента загружена из локальной директории")
 			} else {
-				log.Fatalf("Failed to load agent config from any location: original path '%s': %v, alt path '%s': %v, local 'agent-config.yaml' not found: %v", 
+				log.Fatalf("Не удалось загрузить конфигурацию агента из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'agent-config.yaml' не найден: %v", 
 					configPath, err, altConfigPath, err, statErr)
 			}
 		} else {
-			log.Printf("Loaded agent config from alternative path: %s", altConfigPath)
+			log.Printf("Конфигурация агента загружена из альтернативного пути: %s", altConfigPath)
 		}
 	} else {
-		log.Printf("Loaded agent config from: %s", configPath)
+		log.Printf("Конфигурация агента загружена из: %s", configPath)
 	}
 
-	// Create updater
+	// Создаем обновляльщик бинарных файлов
+	// Принимает URL сервера и токен авторизации, возвращает объект обновления
 	updater := updater.NewBinaryUpdater(cfg.ServerURL, cfg.Token)
 	
-	// Check if monitor binary exists, download if needed
+	// Проверяем наличие бинарного файла монитора, скачиваем при необходимости
+	// Принимает путь к бинарному файлу монитора, возвращает ошибку при неудаче
 	err = updater.CheckAndDownloadMonitor(cfg.Paths.MonitorBin)
 	if err != nil {
-		log.Fatalf("Failed to download monitor binary: %v", err)
+		log.Fatalf("Не удалось скачать бинарный файл монитора: %v", err)
 	}
 
-	// Create monitor controller
+	// Создаем контроллер мониторинга
+	// Принимает пути к бинарному файлу монитора, файлу конфигурации и лог-файлу, возвращает контроллер
 	monitorCtrl := monitor.NewController(
-		cfg.Paths.MonitorBin,
-		cfg.Paths.MonitorConfig,
-		cfg.Paths.MonitorLogFile,
+		cfg.Paths.MonitorBin,      // Путь к исполняемому файлу монитора
+		cfg.Paths.MonitorConfig,   // Путь к конфигурационному файлу монитора
+		cfg.Paths.MonitorLogFile,  // Путь к лог-файлу монитора
 	)
 
-	// Create WebSocket client
+	// Создаем клиент WebSocket-соединения
+	// Принимает URL сервера и токен авторизации, возвращает клиент WebSocket
 	wsClient := ws.NewClient(cfg.ServerURL, cfg.Token)
 
-	// Set up command handler
+	// Устанавливаем обработчик команд от сервера
+	// Принимает словарь с командой, обрабатывает различные типы команд
 	wsClient.OnCommand = func(cmd map[string]interface{}) {
+		// Получаем действие из команды
+		// cmd - словарь с командой от сервера
+		// возвращает строку действия или false если действие не найдено
 		action, ok := cmd["action"].(string)
 		if !ok {
-			log.Printf("Invalid command format: missing action")
+			log.Printf("Неверный формат команды: отсутствует действие")
 			return
 		}
 
+		// Обрабатываем различные типы команд
 		switch action {
 		case "start_monitor":
+			// Команда запуска монитора
+			// Вызывает метод Start() контроллера мониторинга
+			// При ошибке логирует проблему, иначе подтверждает успешный запуск
 			err := monitorCtrl.Start()
 			if err != nil {
-				log.Printf("Failed to start monitor: %v", err)
+				log.Printf("Не удалось запустить монитор: %v", err)
 			} else {
-				log.Printf("Monitor started successfully")
+				log.Printf("Монитор успешно запущен")
 			}
 		case "stop_monitor":
+			// Команда остановки монитора
+			// Вызывает метод Stop() контроллера мониторинга
+			// При ошибке логирует проблему, иначе подтверждает успешную остановку
 			err := monitorCtrl.Stop()
 			if err != nil {
-				log.Printf("Failed to stop monitor: %v", err)
+				log.Printf("Не удалось остановить монитор: %v", err)
 			} else {
-				log.Printf("Monitor stopped successfully")
+				log.Printf("Монитор успешно остановлен")
 			}
 		case "restart_monitor":
+			// Команда перезапуска монитора
+			// Вызывает метод Restart() контроллера мониторинга
+			// При ошибке логирует проблему, иначе подтверждает успешный перезапуск
 			err := monitorCtrl.Restart()
 			if err != nil {
-				log.Printf("Failed to restart monitor: %v", err)
+				log.Printf("Не удалось перезапустить монитор: %v", err)
 			} else {
-				log.Printf("Monitor restarted successfully")
+				log.Printf("Монитор успешно перезапущен")
 			}
 		case "update_config":
+			// Команда обновления конфигурации
+			// Получает пейлоад с новым путем к конфигурации и обновляет конфигурацию монитора
 			payload, ok := cmd["payload"].(map[string]interface{})
 			if !ok {
-				log.Printf("Invalid config update payload")
+				log.Printf("Неверный пейлоад обновления конфигурации")
 				return
 			}
 			
-			// Handle config update
+			// Обработка обновления конфигурации
 			configPath, ok := payload["config_path"].(string)
 			if ok {
 				err := monitorCtrl.UpdateConfig(configPath)
 				if err != nil {
-					log.Printf("Failed to update config: %v", err)
+					log.Printf("Не удалось обновить конфигурацию: %v", err)
 				} else {
-					log.Printf("Config updated successfully")
+					log.Printf("Конфигурация успешно обновлена")
 				}
 			}
 		default:
-			log.Printf("Unknown command: %s", action)
+			// Неизвестная команда
+			log.Printf("Неизвестная команда: %s", action)
 		}
 	}
 
-	// Set up connection handlers
+	// Устанавливаем обработчики состояния соединения
 	wsClient.OnConnect = func() {
-		log.Printf("Connected to server")
+		// Обработчик установки соединения
+		// Вызывается при успешном подключении к серверу
+		log.Printf("Подключено к серверу")
 	}
 	
 	wsClient.OnDisconnect = func() {
-		log.Printf("Disconnected from server")
+		// Обработчик разрыва соединения
+		// Вызывается при отключении от сервера
+		log.Printf("Отключено от сервера")
 	}
 
-	// Connect to server
+	// Подключаемся к серверу
+	// Выполняет подключение к серверу по WebSocket протоколу
+	// Возвращает ошибку при неудаче
 	err = wsClient.Connect()
 	if err != nil {
-		log.Fatalf("Failed to connect to server: %v", err)
+		log.Fatalf("Не удалось подключиться к серверу: %v", err)
 	}
 
-	// Start metrics reporting loop
+	// Запускаем цикл отправки метрик в отдельной горутине
+	// Цель: периодически собирать и отправлять метрики производительности системы
 	go func() {
+		// Создаем таймер с интервалом из конфигурации
 		ticker := time.NewTicker(time.Duration(cfg.MetricsInterval) * time.Second)
 		defer ticker.Stop()
 
+		// Бесконечный цикл с заданным интервалом
 		for range ticker.C {
+			// Проверяем, подключен ли клиент к серверу
 			if !wsClient.Connected {
 				continue
 			}
 
-			// Get actual system metrics
-			hashrate := getRealHashrate()
-			cpuUsage := getRealCPUUsage()
-			ramUsage := getRealRAMUsage()
-			tempCPU := getRealTempCPU()
-			status := getRealStatus()
+			// Получаем реальные метрики системы
+			hashrate := getRealHashrate()  // Хешрейт системы
+			cpuUsage := getRealCPUUsage()  // Использование CPU
+			ramUsage := getRealRAMUsage()  // Использование RAM
+			tempCPU := getRealTempCPU()    // Температура CPU
+			status := getRealStatus()      // Статус системы
 
+			// Отправляем метрики на сервер
+			// Принимает значения хешрейта, использования CPU, RAM, температуры CPU и статуса
+			// Возвращает ошибку при неудаче
 			err := wsClient.SendMetrics(hashrate, cpuUsage, ramUsage, tempCPU, status)
 			if err != nil {
-				log.Printf("Failed to send metrics: %v", err)
+				log.Printf("Не удалось отправить метрики: %v", err)
 			}
 		}
 	}()
 
-	// Handle OS signals for graceful shutdown
+	// Обрабатываем системные сигналы для корректного завершения работы
+	// Создаем канал для получения сигналов завершения
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	
-	log.Printf("Agent started, connected to %s", cfg.ServerURL)
+	log.Printf("Агент запущен, подключен к %s", cfg.ServerURL)
 	
-	// Wait for signal to shut down
+	// Ждем сигнал завершения
 	<-sigChan
-	log.Printf("Shutting down agent...")
+	log.Printf("Завершение работы агента...")
 	
+	// Отключаемся от сервера
 	wsClient.Disconnect()
 	
-	log.Printf("Agent stopped")
+	log.Printf("Агент остановлен")
 }
 
-// Real functions to collect actual system metrics
+// Функции для сбора реальных метрик системы
+
+// Функция getRealHashrate собирает информацию о хешрейте системы
+// Возвращает: значение хешрейта как float64
+// В реальном приложении для майнинга это взаимодействовало бы с майнером для получения реального хешрейта
+// В настоящее время мы симулируем динамическое значение на основе использования CPU
 func getRealHashrate() float64 {
-	// In a real mining application, this would interface with the miner to get actual hashrate
-	// For now, we'll simulate a dynamic value based on CPU usage
+	// Получаем процент использования CPU за 1 секунду
+	// Возвращает: массив процентов использования для каждого ядра или ошибку
 	percent, err := cpu.Percent(time.Second, false)
 	if err != nil || len(percent) == 0 {
 		return 0.0
 	}
 	
-	// Simulate hashrate based on CPU usage (this is just a simulation)
-	// In a real implementation, this would come from actual mining software
-	return percent[0] * 10.0 // Just an example calculation
+	// Симулируем хешрейт на основе использования CPU (это просто симуляция)
+	// В реальной реализации это происходило бы из фактического программного обеспечения для майнинга
+	return percent[0] * 10.0 // Просто пример вычисления
 }
 
+// Функция getRealCPUUsage собирает информацию об использовании процессора
+// Возвращает: процент использования CPU как float64
 func getRealCPUUsage() float64 {
+	// Получаем процент использования CPU за 1 секунду
+	// Возвращает: массив процентов использования для каждого ядра или ошибку
 	percent, err := cpu.Percent(time.Second, false)
 	if err != nil || len(percent) == 0 {
 		return 0.0
 	}
+	// Возвращаем использование первого ядра
 	return percent[0]
 }
 
+// Функция getRealRAMUsage собирает информацию об использовании оперативной памяти
+// Возвращает: процент использования RAM как float64
 func getRealRAMUsage() float64 {
+	// Получаем статистику виртуальной памяти
+	// Возвращает: структуру с информацией о памяти или ошибку
 	vmStat, err := mem.VirtualMemory()
 	if err != nil {
 		return 0.0
 	}
+	// Возвращаем процент использования
 	return vmStat.UsedPercent
 }
 
+// Функция getRealTempCPU собирает информацию о температуре процессора
+// Возвращает: температуру CPU в градусах Цельсия как целое число
 func getRealTempCPU() int {
-	// Getting temperature varies by platform and might not be available on all systems
-	// Return a reasonable default if not available
-	temp := 50 // Default temperature in Celsius
+	// Получение температуры зависит от платформы и может быть недоступно на всех системах
+	// Возвращаем разумное значение по умолчанию, если недоступно
+	temp := 50 // Температура по умолчанию в Цельсиях
 	
-	// On some systems we could get actual temperature readings
-	// But gopsutil doesn't provide cross-platform temperature reading consistently
-	// So we'll return a simulated value based on CPU usage
+	// На некоторых системах можно получить реальные показания температуры
+	// Но gopsutil не предоставляет последовательное чтение температуры для разных платформ
+	// Поэтому мы вернем симулированное значение на основе использования CPU
 	cpuUsage := getRealCPUUsage()
 	if cpuUsage > 80 {
 		temp = 70
@@ -223,9 +284,11 @@ func getRealTempCPU() int {
 	return temp
 }
 
+// Функция getRealStatus определяет статус системы
+// Возвращает: строку статуса ("active", "idle", "maintenance", и т.д.)
 func getRealStatus() string {
-	// In a real implementation, this would check the actual status of the mining process
-	// For now, we'll determine status based on if the monitor is running
-	// Since we don't have direct access here, we'll just return a default status
-	return "active" // Could be "active", "idle", "maintenance", etc.
+	// В реальной реализации это проверяло бы фактический статус процесса майнинга
+	// В настоящее время мы определим статус на основе того, запущен ли монитор
+	// Поскольку у нас нет прямого доступа здесь, мы просто вернем статус по умолчанию
+	return "active" // Может быть "active", "idle", "maintenance", и т.д.
 }

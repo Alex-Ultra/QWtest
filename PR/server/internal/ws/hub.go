@@ -1,110 +1,173 @@
+// Пакет ws предоставляет функциональность для работы с WebSocket-хабом сервера
 package ws
 
 import (
-	"sync"
-	"pr-server/internal/models"
+	"sync"              // Пакет для синхронизации горутин
+	"pr-server/internal/models" // Внутренний модуль с определением модели агента
 )
 
-// Client represents a connected agent
+// Структура Client представляет собой подключенного агента
+// ID - уникальный идентификатор клиента
+// Hub - ссылка на хаб, которому принадлежит клиент
+// Conn - соединение с клиентом (тип будет определен позже)
+// Send - канал для отправки сообщений клиенту
+// Agent - модель данных агента
 type Client struct {
-	ID     string
-	Hub    *Hub
-	Conn   interface{} // We'll use interface{} for now, we'll define the actual type later
-	Send   chan []byte
-	Agent  *models.Agent
+	ID     string                    // Уникальный идентификатор клиента
+	Hub    *Hub                      // Ссылка на хаб, которому принадлежит клиент
+	Conn   interface{}               // Соединение с клиентом (тип будет определен позже)
+	Send   chan []byte               // Канал для отправки сообщений клиенту
+	Agent  *models.Agent             // Модель данных агента
 }
 
-// Hub maintains the set of active clients and broadcasts messages to them
+// Структура Hub управляет набором активных клиентов и рассылает им сообщения
+// clients - карта зарегистрированных клиентов
+// broadcast - канал для входящих сообщений от клиентов
+// register - канал для регистрации новых клиентов
+// unregister - канал для удаления клиентов
+// mutex - мьютекс для защиты одновременного доступа к клиентам
 type Hub struct {
-	// Registered clients
+	// Зарегистрированные клиенты
 	clients map[string]*Client
 
-	// Inbound messages from the clients
+	// Входящие сообщения от клиентов
 	broadcast chan []byte
 
-	// Register requests from the clients
+	// Запросы на регистрацию от клиентов
 	register chan *Client
 
-	// Unregister requests from clients
+	// Запросы на отмену регистрации от клиентов
 	unregister chan *Client
 
-	// Mutex to protect concurrent access to clients
+	// Мьютекс для защиты одновременного доступа к клиентам
 	mutex sync.RWMutex
 }
 
+// Функция NewHub создает новый экземпляр хаба
+// Принимает: ничего
+// Возвращает: указатель на новый экземпляр Hub
 func NewHub() *Hub {
+	// Создаем и возвращаем новый экземпляр хаба
+	// Инициализируем все необходимые каналы и карту клиентов
 	return &Hub{
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[string]*Client),
+		broadcast:  make(chan []byte),      // Канал для рассылки сообщений
+		register:   make(chan *Client),     // Канал для регистрации клиентов
+		unregister: make(chan *Client),     // Канал для отмены регистрации клиентов
+		clients:    make(map[string]*Client), // Карта для хранения клиентов
 	}
 }
 
+// Метод Run запускает основной цикл обработки хаба
+// Принимает: ничего
+// Возвращает: ничего
+// Работает в отдельной горутине, обрабатывая регистрацию, отмену регистрации и рассылку сообщений
 func (h *Hub) Run() {
+	// Бесконечный цикл обработки событий хаба
 	for {
+		// Используем select для ожидания различных событий
 		select {
 		case client := <-h.register:
+			// Обработка регистрации нового клиента
+			// Блокируем хаб для записи
 			h.mutex.Lock()
+			// Добавляем клиента в карту
 			h.clients[client.ID] = client
+			// Снимаем блокировку
 			h.mutex.Unlock()
 			
 		case client := <-h.unregister:
+			// Обработка отмены регистрации клиента
+			// Блокируем хаб для записи
 			h.mutex.Lock()
+			// Проверяем, существует ли клиент в карте
 			if _, ok := h.clients[client.ID]; ok {
+				// Удаляем клиента из карты
 				delete(h.clients, client.ID)
+				// Закрываем канал отправки для клиента
 				close(client.Send)
 			}
+			// Снимаем блокировку
 			h.mutex.Unlock()
 			
 		case message := <-h.broadcast:
+			// Обработка рассылки сообщения всем клиентам
+			// Блокируем хаб для чтения
 			h.mutex.RLock()
+			// Проходим по всем клиентам и отправляем им сообщение
 			for _, client := range h.clients {
+				// Используем select с default, чтобы избежать блокировки
 				select {
 				case client.Send <- message:
+					// Сообщение успешно отправлено
 				default:
+					// Канал клиента заблокирован, закрываем его канал и удаляем из хаба
 					close(client.Send)
 					delete(h.clients, client.ID)
 				}
 			}
+			// Снимаем блокировку чтения
 			h.mutex.RUnlock()
 		}
 	}
 }
 
-// GetClient returns a client by ID
+// Метод GetClient возвращает клиента по ID
+// Принимает: идентификатор клиента
+// Возвращает: указатель на клиента и флаг существования
 func (h *Hub) GetClient(id string) (*Client, bool) {
+	// Блокируем хаб для чтения
 	h.mutex.RLock()
+	// Отложенное снятие блокировки
 	defer h.mutex.RUnlock()
 	
+	// Получаем клиента из карты по ID
 	client, ok := h.clients[id]
+	// Возвращаем клиента и флаг существования
 	return client, ok
 }
 
-// SendToClient sends a message to a specific client
+// Метод SendToClient отправляет сообщение конкретному клиенту
+// Принимает: идентификатор клиента и сообщение в байтах
+// Возвращает: флаг успешной отправки
 func (h *Hub) SendToClient(clientID string, message []byte) bool {
+	// Блокируем хаб для чтения
 	h.mutex.RLock()
+	// Отложенное снятие блокировки
 	defer h.mutex.RUnlock()
 	
+	// Получаем клиента из карты по ID
 	client, ok := h.clients[clientID]
 	if !ok {
+		// Клиент не найден, возвращаем false
 		return false
 	}
 	
+	// Пытаемся отправить сообщение клиенту
+	// Используем select с default, чтобы избежать блокировки
 	select {
 	case client.Send <- message:
+		// Сообщение успешно отправлено
 		return true
 	default:
+		// Канал клиента заблокирован, возвращаем false
 		return false
 	}
 }
 
-// Register registers a new client
+// Метод Register регистрирует нового клиента в хабе
+// Принимает: указатель на клиента
+// Возвращает: ничего
 func (h *Hub) Register(client *Client) {
+	// Отправляем клиента в канал регистрации
+	// Это будет обработано в основном цикле Run()
 	h.register <- client
 }
 
-// Unregister unregisters a client
+// Метод Unregister отменяет регистрацию клиента в хабе
+// Принимает: указатель на клиента
+// Возвращает: ничего
 func (h *Hub) Unregister(client *Client) {
+	// Отправляем клиента в канал отмены регистрации
+	// Это будет обработано в основном цикле Run()
 	h.unregister <- client
 }
