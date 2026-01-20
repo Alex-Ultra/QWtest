@@ -2,14 +2,27 @@
 # Compiled and build artifacts
 *.o
 *.obj
+*.exe
+*.dll
+*.so
+*.a
 *.out
 
 # Dependencies
 vendor/
+node_modules/
+.venv/
+venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
 # Logs and temp files
 *.log
 *.tmp
+*.swp
 
 # Environment
 .env
@@ -20,11 +33,7 @@ vendor/
 .vscode/
 .idea/
 
-# Go-specific
-*.exe
-*.dll
-*.so
-*.a
-*.dylib
-*.plist
+# Build outputs
+build/
+dist/
 ```

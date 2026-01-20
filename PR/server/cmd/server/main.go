@@ -4,7 +4,6 @@ package main
 import (
 	"log"         // Пакет для логирования событий
 	"net/http"    // Пакет для HTTP-сервера
-	"os"          // Пакет для работы с операционной системой
 	"path/filepath" // Пакет для работы с путями к файлам
 
 	"github.com/gorilla/mux" // Маршрутизатор HTTP-запросов
@@ -20,35 +19,28 @@ import (
 // 3. Создает маршрутизатор и инициализирует API-обработчики
 // 4. Запускает HTTP-сервер
 func main() {
-	// Определяем путь к конфигурационному файлу относительно местоположения исполняемого файла
-	configPath := filepath.Join("configs", "config.yaml")
+	// Initialize config manager
+	configManager := config.NewConfigManager(filepath.Join("configs", "config.yaml"))
 	
-	// Также проверяем абсолютный путь или рабочую директорию
-	cfg, err := config.LoadConfig(configPath)
+	// Ensure all required config files exist
+	err := configManager.EnsureConfigs()
 	if err != nil {
-		// Пробуем альтернативные пути для совместимости между платформами
-		// Проверяем, находимся ли мы в подкаталоге, пробуем относительный путь к корню
-		altConfigPath := filepath.Join("..", "configs", "config.yaml")
-		cfg, err = config.LoadConfig(altConfigPath)
-		if err != nil {
-			// Проверяем, существует ли конфигурационный файл в текущей директории
-			if _, statErr := os.Stat("config.yaml"); statErr == nil {
-				cfg, err = config.LoadConfig("config.yaml")
-				if err != nil {
-					log.Fatalf("Не удалось загрузить конфигурацию из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'config.yaml': %v", 
-						configPath, err, altConfigPath, err, err)
-				}
-				log.Printf("Конфигурация загружена из локальной директории")
-			} else {
-				log.Fatalf("Не удалось загрузить конфигурацию из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'config.yaml' не найден: %v", 
-					configPath, err, altConfigPath, err, statErr)
-			}
-		} else {
-			log.Printf("Конфигурация загружена из альтернативного пути: %s", altConfigPath)
-		}
-	} else {
-		log.Printf("Конфигурация загружена из: %s", configPath)
+		log.Fatalf("Failed to ensure config files: %v", err)
 	}
+	
+	// Load the configuration
+	cfg, err := config.LoadConfig(filepath.Join("configs", "config.yaml"))
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+	
+	// Validate the configuration
+	err = configManager.ValidateConfig(cfg)
+	if err != nil {
+		log.Fatalf("Configuration validation failed: %v", err)
+	}
+	
+	log.Printf("Конфигурация загружена из: configs/config.yaml")
 
 	// Инициализируем WebSocket-хаб
 	// Создает новый экземпляр хаба для управления WebSocket-соединениями

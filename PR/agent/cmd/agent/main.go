@@ -5,13 +5,10 @@ import (
 	"log"      // Пакет для логирования событий
 	"os"       // Пакет для работы с операционной системой
 	"os/signal" // Пакет для обработки системных сигналов
-	"runtime"  // Пакет для получения информации о среде выполнения Go
-	"strings"  // Пакет для работы со строками
 	"syscall"  // Пакет для системных вызовов Unix
 	"time"     // Пакет для работы со временем
 
 	"github.com/shirou/gopsutil/v3/cpu"   // Библиотека для получения информации о процессоре
-	"github.com/shirou/gopsutil/v3/host"  // Библиотека для получения информации о системе
 	"github.com/shirou/gopsutil/v3/mem"   // Библиотека для получения информации о памяти
 	monitor_agent "pr-agent/internal/config" // Внутренний модуль для загрузки конфигурации агента
 	"pr-agent/internal/monitor"             // Внутренний модуль управления монитором
@@ -27,34 +24,28 @@ import (
 // 4. Запускает цикл отправки метрик
 // 5. Обрабатывает сигналы завершения для корректного завершения работы
 func main() {
-	// Определяем путь к конфигурационному файлу относительно местоположения исполняемого файла
-	configPath := "configs/agent-config.yaml"
+	// Initialize config manager
+	configManager := monitor_agent.NewConfigManager("configs/agent-config.yaml")
 	
-	// Также проверяем альтернативные пути для совместимости между платформами
-	cfg, err := monitor_agent.LoadConfig(configPath)
+	// Ensure all required config files exist
+	err := configManager.EnsureConfigs()
 	if err != nil {
-		// Пробуем альтернативные пути для совместимости между платформами
-		altConfigPath := "../configs/agent-config.yaml"
-		cfg, err = monitor_agent.LoadConfig(altConfigPath)
-		if err != nil {
-			// Проверяем, существует ли конфигурационный файл в текущей директории
-			if _, statErr := os.Stat("agent-config.yaml"); statErr == nil {
-				cfg, err = monitor_agent.LoadConfig("agent-config.yaml")
-				if err != nil {
-					log.Fatalf("Не удалось загрузить конфигурацию агента из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'agent-config.yaml': %v", 
-						configPath, err, altConfigPath, err, err)
-				}
-				log.Printf("Конфигурация агента загружена из локальной директории")
-			} else {
-				log.Fatalf("Не удалось загрузить конфигурацию агента из любого местоположения: исходный путь '%s': %v, альтернативный путь '%s': %v, локальный 'agent-config.yaml' не найден: %v", 
-					configPath, err, altConfigPath, err, statErr)
-			}
-		} else {
-			log.Printf("Конфигурация агента загружена из альтернативного пути: %s", altConfigPath)
-		}
-	} else {
-		log.Printf("Конфигурация агента загружена из: %s", configPath)
+		log.Fatalf("Failed to ensure config files: %v", err)
 	}
+	
+	// Load the configuration
+	cfg, err := monitor_agent.LoadConfig("configs/agent-config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+	
+	// Validate the configuration
+	err = configManager.ValidateConfig(cfg)
+	if err != nil {
+		log.Fatalf("Configuration validation failed: %v", err)
+	}
+	
+	log.Printf("Конфигурация агента загружена из: configs/agent-config.yaml")
 
 	// Создаем обновляльщик бинарных файлов
 	// Принимает URL сервера и токен авторизации, возвращает объект обновления
