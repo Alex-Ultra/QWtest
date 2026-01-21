@@ -1,0 +1,28 @@
+{
+  "name": "techsupport-assistant-tma",
+  "version": "1.0.0",
+  "description": "TechSupport Assistant Telegram Mini App",
+  "main": "src/main.tsx",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "zustand": "^4.4.0",
+    "@twa-dev/sdk": "^7.0.0",
+    "axios": "^1.4.0",
+    "date-fns": "^2.30.0",
+    "@telegram-apps/ui-components": "^1.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vite": "^4.4.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "tslib": "^2.6.0"
+  }
+}
