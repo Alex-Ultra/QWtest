@@ -1,42 +1,63 @@
 ```
-# Go binaries
-*.exe
-*.dll
-*.so
-*.dylib
+# Dependencies
+node_modules/
 
-# Build artifacts
-bin/
+# Build outputs
 dist/
 build/
-
-# Dependencies
-vendor/
-
-# Logs
-*.log
+coverage/
+htmlcov/
 
 # Environment variables
 .env
 .env.local
-*.env
+.env.*
 
-# IDE files
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
+
+# TypeScript/JavaScript
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+.next/
+nuxt/dist/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
+# Logs
+*.log
+
 # OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Cache
-.mypy_cache/
-.pytest_cache/
 ```
